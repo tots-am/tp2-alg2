@@ -111,17 +111,25 @@ SERIES = [
 
 
 def fit_curves(n, y):
-    """Ajusta y = a*f(n) + c (a, c >= 0, NNLS) para cada candidato e a lei de
-    potência log y = log a + b log n. Retorna lista de dicts com R² e RMSE."""
+    """Ajusta y = a*f(n) + c (a, c >= 0) para cada candidato e a lei de potência
+    log y = log a + b log n. Retorna lista de dicts com R², R² em log e RMSE.
+
+    O ajuste minimiza o erro RELATIVO, sum(((a f + c - y)/y)^2), via NNLS sobre as
+    linhas divididas por y. Mínimos quadrados comuns seriam dominados pelos pontos de
+    N grande (tempos 1000x maiores): o intercepto absorveria o erro e a curva
+    erraria por ordens de grandeza em N pequeno."""
     out = []
+    m = y > 0
     for name, f in CANDIDATES.items():
         X = np.column_stack([f(n), np.ones_like(n)])
         scale = X.max(axis=0)
-        coef, _ = nnls(X / scale, y)
-        yhat = (X / scale) @ coef
+        Xs = X / scale
+        coef, _ = nnls(Xs[m] / y[m, None], np.ones(m.sum()))
+        yhat = Xs @ coef
         r2, rmse = _metrics(y, yhat)
+        r2log = _metrics(np.log(y[m]), np.log(np.maximum(yhat[m], 1e-300)))[0]
         out.append({"model": name, "a": coef[0] / scale[0], "c": coef[1] / scale[1],
-                    "R2": r2, "RMSE": rmse})
+                    "R2": r2, "R2_log": r2log, "RMSE": rmse})
     m = y > 0
     b, loga, r, _, se = stats.linregress(np.log(n[m]), np.log(y[m]))
     yhat = np.exp(loga) * n ** b
@@ -148,14 +156,18 @@ def complexity():
         n, y = d.n.to_numpy(float), d[col].to_numpy(float)
         fits = fit_curves(n, y)
         for f in fits:
-            rows.append({"série": label, "teórica": theo, **{k: f[k] for k in ("model", "R2", "RMSE")}})
+            rows.append({"série": label, "teórica": theo,
+                         **{k: f[k] for k in ("model", "R2", "R2_log", "RMSE")}})
         poly = [f for f in fits if not f["model"].startswith("pot")]
-        top = max(poly, key=lambda f: f["R2"])
+        top = max(poly, key=lambda f: f["R2_log"])          # critério: erro relativo
         pw = fits[-1]
         best.append({"série": label, "teórica": theo, "melhor ajuste": top["model"],
-                     "R2": top["R2"], "RMSE (s)": top["RMSE"],
-                     "expoente b": pw["b"], "IC95% b": pw["b_ci"], "R2 (log)": pw["R2_log"]})
-        ax = axes[0] if "total" not in label else axes[1]
+                     "R2": top["R2"], "R2 (log)": top["R2_log"], "RMSE (s)": top["RMSE"],
+                     "expoente b": pw["b"], "IC95% b": pw["b_ci"]})
+        total = "total" in label
+        if total:                                           # mesma cor do algoritmo nas demais figuras
+            c, mk = COLOR[strat], MARK[strat]
+        ax = axes[1] if total else axes[0]
         ax.loglog(n, y, mk, color=c, label=label, markersize=4)
         nn_ = np.linspace(n.min(), n.max(), 200)
         ax.loglog(nn_, top["a"] * CANDIDATES[top["model"]](nn_) + top["c"], "-", color=c, lw=1)
