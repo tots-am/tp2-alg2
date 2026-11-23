@@ -48,32 +48,43 @@ def phase_heuristics(reps: int, scaling: bool):
     sets = [("test", tests)]
     if scaling:
         sets.append(("scaling", instances.scaling_set()))
-
     rows = []
     for setname, insts in sets:
-        for inst in insts:
-            for s in STRATS:
-                times, sub_times = [], {}
-                for _ in range(reps):                       # passada de tempo
-                    tour, cost, t, prof = heuristics.run_strategy(s, inst)
-                    times.append(t)
-                    for k, v in prof.times.items():
-                        sub_times.setdefault(k, []).append(v)
-                _, _, _, pm = heuristics.run_strategy(s, inst, memory=True)   # passada de memória
-                row = {"set": setname, "instance": inst.name, "n": inst.n, "strategy": s,
-                       "cost": cost, "time_median": statistics.median(times),
-                       "time_min": min(times), "reps": reps,
-                       "peak_mem_bytes": max(pm.peaks.values(), default=0)}
-                for k, v in sub_times.items():
-                    row[f"t_{k}"] = statistics.median(v)
-                for k, v in pm.peaks.items():
-                    row[f"mem_{k}"] = v
-                rows.append(row)
-                if setname == "test":
-                    with open(os.path.join(TOURS, f"{inst.name}__{s}.json"), "w") as f:
-                        json.dump({"cost": cost, "time": statistics.median(times), "tour": tour}, f)
-            print(f"[{setname}] {inst.name:14s} n={inst.n:3d} ok", flush=True)
+        rows += _measure(insts, setname, reps, save_tours=(setname == "test"))
     _write_csv(os.path.join(RES, "heuristics.csv"), rows)
+
+
+def phase_scaling(base: str, sizes: list[int], reps: int):
+    """Curvas de complexidade em N grande (não toca nos tours do warm-start)."""
+    rows = _measure(instances.scaling_set(base, sizes), "scaling", reps, save_tours=False)
+    _write_csv(os.path.join(RES, "scaling.csv"), rows)
+
+
+def _measure(insts, setname, reps, save_tours):
+    rows = []
+    for inst in insts:
+        for s in STRATS:
+            times, sub_times = [], {}
+            for _ in range(reps):                       # passada de tempo
+                tour, cost, t, prof = heuristics.run_strategy(s, inst)
+                times.append(t)
+                for k, v in prof.times.items():
+                    sub_times.setdefault(k, []).append(v)
+            _, _, _, pm = heuristics.run_strategy(s, inst, memory=True)   # passada de memória
+            row = {"set": setname, "instance": inst.name, "n": inst.n, "strategy": s,
+                   "cost": cost, "time_median": statistics.median(times),
+                   "time_min": min(times), "reps": reps,
+                   "peak_mem_bytes": max(pm.peaks.values(), default=0)}
+            for k, v in sub_times.items():
+                row[f"t_{k}"] = statistics.median(v)
+            for k, v in pm.peaks.items():
+                row[f"mem_{k}"] = v
+            rows.append(row)
+            if save_tours:
+                with open(os.path.join(TOURS, f"{inst.name}__{s}.json"), "w") as f:
+                    json.dump({"cost": cost, "time": statistics.median(times), "tour": tour}, f)
+        print(f"[{setname}] {inst.name:14s} n={inst.n:4d} ok", flush=True)
+    return rows
 
 
 # ----------------------------------------------------------------------------
@@ -178,6 +189,10 @@ def main(argv=None):
     h = sub.add_parser("heuristics")
     h.add_argument("--reps", type=int, default=5)
     h.add_argument("--no-scaling", action="store_true")
+    sc = sub.add_parser("scaling")
+    sc.add_argument("--base", default="pr1002")
+    sc.add_argument("--sizes", default=",".join(map(str, range(50, 1001, 50))))
+    sc.add_argument("--reps", type=int, default=3)
     b = sub.add_parser("bnb")
     b.add_argument("--workers", type=int, default=4)
     b.add_argument("--time-limit", type=float, default=1800.0)
@@ -188,6 +203,8 @@ def main(argv=None):
     a = ap.parse_args(argv)
     if a.cmd == "heuristics":
         phase_heuristics(a.reps, not a.no_scaling)
+    elif a.cmd == "scaling":
+        phase_scaling(a.base, [int(x) for x in a.sizes.split(",")], a.reps)
     else:
         phase_bnb(a.workers, a.time_limit, a.bounds.split(","), a.max_n,
                   a.only.split(",") if a.only else None, a.strategies.split(","))
