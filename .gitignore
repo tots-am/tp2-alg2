@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.pyc
+src/bnb/bnb
+*.aux
+*.log
+*.out
