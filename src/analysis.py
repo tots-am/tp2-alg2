@@ -8,6 +8,7 @@ que existir em results/ e ignora o resto.
 from __future__ import annotations
 
 import os
+import re
 import warnings
 
 import matplotlib
@@ -66,7 +67,12 @@ def _table(df: pd.DataFrame, name: str, floatfmt="{:.3g}", index=True):
     def fmt(v):
         if isinstance(v, (float, np.floating)):
             return "--" if np.isnan(v) else floatfmt.format(v)
-        return str(v).replace("_", r"\_").replace("%", r"\%")
+        s = str(v)
+        for a, b in (("\\", r"\textbackslash{}"), ("&", r"\&"), ("%", r"\%"), ("_", r"\_"), ("#", r"\#")):
+            s = s.replace(a, b)
+        s = re.sub(r"n\^(\d)", "\x00\\1\x01", s)       # nomes de modelo: n^2 -> $n^{2}$
+        s = s.replace("^", r"\textasciicircum{}")
+        return s.replace("\x00", "$n^{").replace("\x01", "}$")
 
     lines = [r"\begin{tabular}{" + "l" * 1 + "r" * (d.shape[1] - 1) + "}", r"\hline",
              " & ".join(fmt(c) for c in d.columns) + r" \\", r"\hline"]
