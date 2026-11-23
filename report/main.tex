@@ -1,0 +1,293 @@
+% Relatório TP2 -- DCC207 Algoritmos 2 -- modelo SBC
+% Compilar no Overleaf a partir do "SBC Conferences Template" (traz sbc-template.sty e sbc.bst).
+% Ver report/README.md.  Marcadores "TODO" indicam trechos a revisar/completar pelo grupo.
+\documentclass[12pt]{article}
+
+\usepackage{sbc-template}
+\usepackage{graphicx,url}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[brazil]{babel}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{xcolor}
+
+% Resultados gerados por `python -m src.analysis`
+\newcommand{\resdir}{../results/analysis}
+\graphicspath{{\resdir/figs/}{figs/}}
+\newcommand{\restable}[1]{\IfFileExists{\resdir/tables/#1.tex}{\resizebox{\linewidth}{!}{\input{\resdir/tables/#1.tex}}}{\textcolor{red}{[tabela #1 ainda não gerada]}}}
+\newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
+
+\sloppy
+
+\title{Branch-and-Bound, Twice-around-the-tree e Christofides para o TSP Euclidiano:\\
+análise empírica de poda, complexidade e sensibilidade}
+
+\author{\todo{Nome 1}\inst{1}, \todo{Nome 2}\inst{1}, \todo{Nome 3}\inst{1}}
+
+\address{Departamento de Ciência da Computação -- Universidade Federal de Minas Gerais (UFMG)\\
+  Belo Horizonte -- MG -- Brasil
+  \email{\todo{emails}}
+}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+  \todo{Abstract (inglês), até 10 linhas, escrito ao final.}
+\end{abstract}
+
+\begin{resumo}
+  Este trabalho avalia empiricamente um algoritmo exato (Branch-and-Bound) e dois
+  algoritmos aproximados (Twice-around-the-tree e Christofides) para o Problema do
+  Caixeiro Viajante euclidiano, em 15 instâncias derivadas da TSPLIB com 12 a 70
+  vértices. Medimos o efeito de cinco estratégias de inicialização do limite superior
+  (\textit{warm-start}) e de três cotas inferiores sobre a árvore de busca, ajustamos
+  curvas de complexidade empírica às sub-rotinas instrumentadas e relacionamos
+  características geométricas das instâncias ao gap de aproximação.
+  \todo{completar com os principais números ao final.}
+\end{resumo}
+
+% ============================================================================
+\section{Introdução}
+
+O Problema do Caixeiro Viajante (TSP) pede o ciclo hamiltoniano de menor custo em um
+grafo completo ponderado. Sua versão de decisão é NP-completa, e mesmo o caso
+euclidiano é NP-difícil~\cite{applegate2006}. Na prática, isso abre duas frentes:
+algoritmos exatos, cujo tempo cresce exponencialmente mas cujo comportamento real depende
+fortemente da qualidade da poda, e algoritmos aproximados polinomiais com garantia de
+desempenho, como o \textit{Twice-around-the-tree} (fator 2) e o algoritmo de
+Christofides (fator 1{,}5)~\cite{christofides1976}, válidos quando os custos obedecem à
+desigualdade triangular.
+
+O foco deste trabalho não é apenas implementar os algoritmos, mas auditar o
+comportamento das implementações: onde está o tempo e a memória de cada sub-rotina,
+quanto a escolha do limite superior inicial e da cota inferior altera a árvore de busca,
+e quais características geométricas das instâncias tornam as aproximações piores ou
+melhores. As contribuições são:
+\begin{itemize}
+  \item uma implementação de Branch-and-Bound em C++11 com três cotas inferiores
+        (ingênua, árvore geradora mínima e Held-Karp) e contagem de nós
+        expandidos e podados, inclusive em execuções interrompidas pelo limite de tempo;
+  \item a comparação de cinco estratégias de \textit{warm-start} quanto à poda e ao
+        custo total (heurística + busca);
+  \item modelos de regressão para a complexidade empírica de cada sub-rotina e um
+        modelo de sensibilidade do gap de aproximação às \textit{features} das instâncias.
+\end{itemize}
+
+A Seção~\ref{sec:impl} descreve a implementação e as decisões de auditoria; a
+Seção~\ref{sec:metodo}, a metodologia experimental; a Seção~\ref{sec:res}, os resultados;
+e a Seção~\ref{sec:concl} conclui.
+
+% ============================================================================
+\section{Implementação, Profiling e Auditoria}\label{sec:impl}
+
+O núcleo exato foi escrito em C++11 e é invocado como subprocesso por um
+\textit{harness} em Python~3, que contém as heurísticas, as aproximações, a extração
+de \textit{features} e a análise estatística. A divisão segue o gargalo: o
+Branch-and-Bound visita milhões de nós, e cada nó exige um cálculo de cota de custo
+$O(n^2)$, o que em Python puro seria interpretado operação a operação.
+
+\todo{Declarar aqui o uso de IA generativa (Claude Code) para geração de código e
+descrever o papel do grupo: revisão, decisões e refatorações (ver Tabela~\ref{tab:auditoria}).
+Ajustar o texto abaixo para refletir o que o grupo de fato verificou e entende.}
+
+\subsection{Branch-and-Bound}
+
+\paragraph{Estratégia de busca.} Usamos busca em profundidade (DFS) com o vértice
+inicial fixo em $0$ e filhos ordenados pela distância ao último vértice do caminho
+(vizinho mais próximo primeiro). A busca \textit{best-first} foi descartada: sua fila de
+prioridade cresce exponencialmente e esgotaria a memória da máquina (7\,GB) já em
+$N \approx 30$, enquanto a DFS mantém apenas o caminho corrente, $O(n)$. O estado é
+incremental: um vetor de caminho e um vetor de visitados, desfeitos no retorno da
+recursão, sem cópias de matriz ou de estruturas por nó.
+
+\paragraph{Cotas inferiores.} Para um caminho parcial $v_0 \to \dots \to v_k$ com
+conjunto $U$ de vértices não visitados:
+\begin{itemize}
+  \item \textbf{naive}: $c(\text{caminho}) + \frac{1}{2}\big(m_1(v_k) + m_1(v_0) +
+        \sum_{u \in U} (m_1(u) + m_2(u))\big)$, em que $m_1, m_2$ são as duas menores
+        arestas incidentes~\cite{levitin2012}; custo $O(1)$ por nó com soma incremental;
+  \item \textbf{mst}: o restante do ciclo é um caminho hamiltoniano $v_k \to U \to v_0$;
+        removidas as arestas das pontas, sobra uma árvore geradora de $U$. Logo
+        $LB = c(\text{caminho}) + \text{MST}(U) + \min_{u} d(v_k,u) + \min_{u} d(u,v_0)$,
+        calculada com Prim denso $O(|U|^2)$;
+  \item \textbf{hk}: a mesma cota sobre custos $d'(i,j) = d(i,j) + \pi_i + \pi_j$, com
+        as penalidades $\pi$ de Held-Karp~\cite{heldkarp1970,heldkarp1971} obtidas
+        \emph{uma vez} na raiz por subgradiente sobre 1-trees. A cota é válida para
+        qualquer $\pi$:
+        $LB = LB'(\text{resto}) - \pi_{v_k} - \pi_{v_0} - 2\sum_{u\in U}\pi_u$.
+\end{itemize}
+O passo do subgradiente foi feito propositalmente independente do limite superior, para
+que a estratégia de \textit{warm-start} influencie a busca \emph{apenas} pela poda,
+isolando a variável do experimento. Como os custos são inteiros, um nó é podado quando
+$\lceil LB \rceil \ge UB$.
+
+\paragraph{Instrumentação.} O binário reporta nós expandidos, nós podados, folhas,
+atualizações do limite superior, profundidade máxima, cota na raiz, tempo até a melhor
+solução, tempo estimado na função de cota (amostragem de 1 a cada 256 chamadas) e pico
+de memória (\texttt{getrusage}). O limite de 30\,min é verificado dentro da busca, de
+modo que execuções interrompidas (registradas como NA) preservam os contadores.
+
+\subsection{Heurísticas de inicialização e algoritmos aproximados}
+
+\begin{itemize}
+  \item \textbf{Trivial}: $0 \to 1 \to \dots \to n-1 \to 0$.
+  \item \textbf{Vizinho mais próximo} a partir do vértice $0$, $O(n^2)$, com máscara
+        vetorizada em NumPy.
+  \item \textbf{Fecho convexo + inserção mais barata}: fecho por \textit{monotone
+        chain}~\cite{andrew1979}, $O(n \log n)$; depois insere-se, a cada passo, o par
+        (vértice, aresta) de menor acréscimo, $O(n^2)$ por passo e $O(n^3)$ no total.
+  \item \textbf{Twice-around-the-tree}: MST por Prim denso~\cite{prim1957} em $O(n^2)$
+        (melhor que Prim com heap, $O(n^2 \log n)$, pois o grafo é completo), seguida de
+        pré-ordem a partir de $0$ (equivalente ao circuito euleriano com atalhos).
+  \item \textbf{Christofides}: MST, vértices de grau ímpar, emparelhamento perfeito de
+        peso mínimo (blossom de Edmonds~\cite{edmonds1965} via
+        NetworkX~\cite{networkx2008}), circuito euleriano (Hierholzer iterativo) e atalhos.
+\end{itemize}
+
+\subsection{Profiling e auditoria}
+
+Cada sub-rotina é cronometrada separadamente (\texttt{perf\_counter}, mediana de 5
+repetições). O pico de memória é medido com \texttt{tracemalloc} numa passada
+\emph{separada}, pois o rastreamento de alocações deixa o código de 2 a 3 vezes mais lento e
+distorceria os tempos. O profiling confirmou que o emparelhamento domina o Christofides:
+de 93\% a 98\% do tempo e também o pico de memória, porque o NetworkX representa o grafo
+completo dos $k$ vértices ímpares como $O(k^2)$ objetos Python.
+\todo{atualizar com números finais de scaling.csv.}
+
+\begin{table}[ht]
+\centering
+\caption{Decisões de auditoria e refatorações. \todo{revisar e completar pelo grupo.}}
+\label{tab:auditoria}
+\small
+\begin{tabular}{p{0.3\linewidth}p{0.62\linewidth}}
+\toprule
+Ponto & Decisão e justificativa \\
+\midrule
+Linguagem do B\&B & C++11 para o núcleo (o Python seria interpretado a cada operação da cota). \\
+Estratégia da árvore & DFS em vez de best-first: memória $O(n)$ em vez de fila exponencial. \\
+Estado por nó & Incremental (caminho + visitados), sem cópia de matriz por nó. \\
+Cota inferior & Medida em pontos aleatórios: com $N=25$ a \textit{naive} estoura 30\,s e a \textit{hk} resolve em 0{,}006\,s; a \textit{hk} só colapsa em $N\approx45$. \\
+Isolamento do warm-start & Subgradiente de Held-Karp com passo independente do UB. \\
+Timeout & Interno à busca, preservando contadores em NA. \\
+MST & Prim denso $O(n^2)$ em vez de Kruskal/heap ($O(n^2\log n)$ em grafo completo). \\
+Medição de memória & \texttt{tracemalloc} em passada separada da cronometrada. \\
+Paralelismo & Processos (não threads, por causa do GIL), um por núcleo físico (\texttt{taskset}), maiores instâncias primeiro, resultados gravados incrementalmente (retomável). \\
+Curvas de escala & Medidas até $N=1000$: com $N \le 280$ o overhead fixo por chamada NumPy mascarava o termo assintótico. \\
+Feature de agrupamento & Clark-Evans com correção de borda de Donnelly~\cite{clarkevans1954,donnelly1978}. \\
+Modelo de sensibilidade & Ridge e validação cruzada por instância (a regressão linear comum sobreajustava: $R^2$ de validação negativo). \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ============================================================================
+\section{Metodologia Experimental}\label{sec:metodo}
+
+\paragraph{Instâncias.} A TSPLIB~\cite{reinelt1991} não contém instâncias EUC\_2D com
+$N \le 40$; as citadas no enunciado são dos tipos GEO, ATT ou EXPLICIT. Como as
+\textit{features} geométricas exigem coordenadas, usamos: (i) instâncias com coordenadas
+(\texttt{NODE\_COORD} ou \texttt{DISPLAY\_DATA}) cujas distâncias foram
+\emph{recalculadas} como EUC\_2D, $d(i,j) = \text{nint}(\lVert p_i - p_j \rVert)$, com
+coordenadas GEO multiplicadas por 100 para preservar precisão; e (ii) recortes formados
+pelos $K$ primeiros pontos de instâncias EUC\_2D maiores, escolhidas por geometria
+(uniforme, agrupada, alinhada, em grade). O conjunto tem 15 instâncias, 12 (80\%) com
+$N \le 40$ e 3 de estresse (att48, eil51, st70). O ótimo publicado só vale para eil51 e
+st70; nas demais, o ótimo de referência é o obtido pelo próprio Branch-and-Bound.
+\todo{tabela com a lista de instâncias, N e origem.}
+
+\paragraph{Ambiente.} Intel Core i5-10210U (4 núcleos físicos), 7\,GB de RAM, WSL2/Ubuntu
+22.04, g++ 11.4 (\texttt{-O3 -march=native}), Python 3.10, NumPy 2.2, NetworkX 3.4,
+scikit-learn 1.7. Três execuções do B\&B em paralelo, cada uma fixada em um núcleo físico
+distinto, com prioridade reduzida (\texttt{nice}). \todo{confirmar.}
+
+\paragraph{Protocolo.} Para cada instância, estratégia de \textit{warm-start} e cota
+(\textit{hk} e \textit{mst}), uma execução do B\&B com limite de 30\,min. O tempo total
+de cada estratégia é o tempo da heurística mais o tempo da busca. Para as curvas de
+complexidade das heurísticas, usamos recortes de $N=50$ a $1000$ da pr1002.
+
+% ============================================================================
+\section{Resultados}\label{sec:res}
+
+\subsection{Complexidade empírica}
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=\linewidth]{complexidade_tempo}
+\caption{Tempo das sub-rotinas (esq.) e dos algoritmos completos (dir.) em função de $N$,
+com a curva teórica de melhor ajuste.}
+\label{fig:complexidade}
+\end{figure}
+
+\begin{table}[ht]
+\centering
+\caption{Melhor ajuste por sub-rotina e expoente da lei de potência $t = a N^b$.}
+\label{tab:complexidade}
+\restable{complexidade_melhor_ajuste}
+\end{table}
+
+\todo{Discutir: expoentes vs. teoria; overhead do NumPy em $N$ pequeno; o matching do
+NetworkX ($O(k^3)$, objetos Python) vs. as sub-rotinas vetorizadas; memória
+(Figura complexidade\_memoria); \textit{garbage collection}.}
+
+\begin{table}[ht]
+\centering
+\caption{Crescimento exponencial do B\&B (warm-start Christofides): fator multiplicativo por vértice.}
+\restable{bnb_crescimento}
+\end{table}
+
+\subsection{Impacto do warm-start na árvore de busca}
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=\linewidth]{warmstart_nos}
+\caption{Nós expandidos por instância e estratégia de \textit{warm-start}, para as cotas
+\textit{hk} e \textit{mst}. Barras hachuradas: execução interrompida em 30\,min (NA).}
+\label{fig:warmstart}
+\end{figure}
+
+\begin{table}[ht]
+\centering
+\caption{Resumo por cota e estratégia (médias geométricas sobre instâncias resolvidas por todas as estratégias).}
+\restable{warmstart_resumo}
+\end{table}
+
+\todo{Discutir: (i) trivial $\approx$ vizinho mais próximo, porque a DFS ordenada pelo
+vizinho mais próximo encontra o tour NN no primeiro mergulho; (ii) o fecho convexo
+frequentemente já é ótimo e reduz drasticamente a árvore (st70/hk: 3{,}8M $\to$ 0{,}15M nós);
+(iii) trade-off tempo da heurística $\times$ poda; (iv) diferença entre as cotas;
+(v) ponto de colapso.}
+
+\subsection{Análise de sensibilidade}
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=0.75\linewidth]{sensibilidade_spearman}
+\caption{Correlação de Spearman entre \textit{features} e gap de aproximação (* $p<0{,}05$).}
+\label{fig:spearman}
+\end{figure}
+
+\begin{table}[ht]
+\centering
+\caption{Desempenho dos modelos de sensibilidade (validação cruzada deixando uma instância de fora).}
+\restable{sensibilidade_modelos}
+\end{table}
+
+\todo{Discutir as features mais importantes (árvore e coeficientes Ridge, versão
+centrada por algoritmo); limitações com 15 instâncias; casos adversariais específicos
+(ex.: a280\_k33 com razão de aspecto 4{,}95, lin105\_k38 em grade).}
+
+% ============================================================================
+\section{Conclusões}\label{sec:concl}
+
+\todo{Resumo das descobertas empíricas.}
+
+\bibliographystyle{sbc}
+\bibliography{refs}
+
+\appendix
+\section{Histórico de prompts}\label{sec:anexo}
+\input{anexo_prompts}
+
+\end{document}
