@@ -5,8 +5,7 @@ src/bnb/bnb
 *.aux
 *.log
 *.out
-tools
-tools/
 *.bbl
 *.blg
 *.toc
+*.tex
