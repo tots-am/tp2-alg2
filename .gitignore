@@ -5,3 +5,11 @@ src/bnb/bnb
 *.aux
 *.log
 *.out
+tools
+
+# anexo de prompts e ferramentas: mantidos fora do repositório pelo grupo
+tools/
+report/anexo_prompts*
+*.bbl
+*.blg
+*.toc
