@@ -1,0 +1,19 @@
+|--- strategy_tat <= 0.50
+|   |--- strategy_nn <= 0.50
+|   |   |--- strategy_christofides <= 0.50
+|   |   |   |--- value: [0.02]
+|   |   |--- strategy_christofides >  0.50
+|   |   |   |--- value: [0.09]
+|   |--- strategy_nn >  0.50
+|   |   |--- aspect_ratio <= 1.99
+|   |   |   |--- value: [0.18]
+|   |   |--- aspect_ratio >  1.99
+|   |   |   |--- value: [0.29]
+|--- strategy_tat >  0.50
+|   |--- n <= 23.50
+|   |   |--- value: [0.17]
+|   |--- n >  23.50
+|   |   |--- nn_cv <= 0.33
+|   |   |   |--- value: [0.37]
+|   |   |--- nn_cv >  0.33
+|   |   |   |--- value: [0.31]
