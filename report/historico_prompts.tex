@@ -1,0 +1,128 @@
+
+\subsection*{Como usei a IA}
+
+\begin{quote}\small
+Ferramenta: assistente de código claude code, em algumas sessões no vscode.\\
+\textbf{Escrito por mim, em partes:} rascunho do B\&B (DFS, cota naive), Prim denso, vizinho mais próximo, extração de features e roteiro experimental. Fiz o roadmap antes de abrir a ferramenta.\\
+\textbf{Feito pela IA:} revisão do meu código, sugestões avaliadas por mim, verificador por força bruta e, fora do escopo do TP, o executor paralelo.\\
+\textbf{Regra:} nenhuma alteração entrou sem o eu ler o que foi gerado e aprovar.
+\end{quote}
+
+\\subsection*{roadmap}
+
+\paragraph{Prompt}
+\begin{quote}\small
+Estou fazendo o TP2 de Algoritmos 2 (TSP euclidiano: Branch-and-Bound,
+Twice-around-the-tree e Christofides). Antes de abrir qualquer arquivo, esta é a minha
+ordem de trabalho: (1) B\&B correto em $N$ pequeno (DFS, poda por $\lceil LB\rceil \ge UB$),
+validado contra força bruta; (2) heurísticas de \textit{warm-start} (trivial, vizinho mais
+próximo, fecho convexo, TAT, Christofides); (3) instrumentação por subrotina (tempo e
+memória); (4) experimentos com limite de 30\,min por execução; (5) análise (regressões,
+warm-start, sensibilidade) e relatório SBC.\\
+Minhas dúvidas, em ordem de importância: a ordem acima faz sentido, ou há uma dependência
+que não estou vendo? Ainda não sei quanto tempo a etapa 4 vai levar. Em C++ ou Python
+para o núcleo do B\&B? Quero os critérios de decisão, não só a resposta. Quais cotas
+inferiores vale testar? Conheço a naive e a de MST, e li que existe a de Held-Karp, mas
+não entendi o custo dela.\\
+Regras: não escreva código por enquanto e não altere nada. Eu escrevo o primeiro rascunho
+do B\&B e peço revisão depois. Se discordar de alguma decisão minha, diga o motivo antes
+de propor outra.
+\end{quote}
+
+\paragraph{Decisão}
+\begin{quote}\small
+P: A etapa 4 (experimentos) é o gargalo. Antecipar o planejamento dela?\\
+R: Sim. Vou estimar o tempo por instância ainda na etapa 1 e deixar o executor pronto
+antes das heurísticas.\\
+P: Qual linguagem para o núcleo do B\&B?\\
+R: C++11 para o núcleo, porque a cota é calculada milhões de vezes. Python fica para as
+heurísticas e a análise.\\
+P: Quais cotas testar?\\
+R: Naive e MST como base. A Held-Karp entra depois de eu medir a folga das duas na raiz,
+para justificar o custo extra.
+\end{quote}
+
+\paragraph{Prompt}
+\begin{quote}\small
+Decidi pelo C++ para o núcleo. Vou escrever o rascunho do B\&B com a cota naive. Quando
+terminar, envio o código para revisão.
+\end{quote}
+
+\subsection*{B\&B}
+
+\paragraph{Prompt} 
+\begin{quote}\small
+Escrevi um código em \texttt{bnb.cpp} (DFS, cota naive incremental, poda por $\lceil LB\rceil \ge UB$). Revise a corretude da poda e o tratamento do vértice inicial. Não reescreva nada: aponte problemas e diga por que são problemas.
+\end{quote}
+
+\paragraph{Resposta}
+\begin{quote}\small
+P: A cota ignora a aresta de retorno ao vértice 0. Posso mostrar um caso mínimo?\\
+R: Sim, mas só o caso. A correção eu faço (reproduzi com $N=5$, entendi a causa e corrigi).
+\end{quote}
+
+\paragraph{Prompt}
+\begin{quote}\small
+Minha cota naive colapsa em $N\approx 25$. Antes de sugerir algo, diga qual propriedade da cota está frouxa.
+\end{quote}
+
+\paragraph{Prompt}
+\begin{quote}\small
+Você sugeriu best-first. Calcule o tamanho da fila para $N=30$ antes de eu decidir.
+\end{quote}
+
+\paragraph{Decisão}
+\begin{quote}\small
+P: Manter DFS ou adotar best-first?\\
+R: Manter DFS: memória $O(n)$; a fila do best-first é exponencial e a máquina tem 7\,GB.
+\end{quote}
+
+\subsection*{Validação independente}
+
+\paragraph{Prompt}
+\begin{quote}\small
+Gere um verificador por força bruta para $N\le 9$ e compare com meu B\&B em 50 instâncias aleatórias. Mostre as divergências antes de qualquer correção.
+\end{quote}
+
+\paragraph{Prompt} 
+\begin{quote}\small
+Os resultados para eil51 e st70 devem bater com a TSPLIB (426 e 675). Se não baterem, quero a hipótese antes do conserto.
+\end{quote}
+
+\subsection*{Sugestões avaliadas}
+
+\paragraph{Decisão}
+\begin{quote}\small
+P: Usar Kruskal com heap para a MST?\\
+R: Não. Grafo completo: Prim denso $O(n^2)$ é melhor que $O(n^2\log n)$.\\
+P: Fazer o passo do subgradiente depender do UB?\\
+R: Não. Acoplaria o warm-start à cota e contaminaria a medição.\\
+P: Medir memória com \texttt{tracemalloc} na mesma passada do tempo?\\
+R: Não. Deixa o código 2--3$\times$ mais lento e distorce o tempo.\\
+P: Recalcular a cota hk em cada nó?\\
+R: Adiar; fica como trabalho futuro.
+\end{quote}
+
+\subsection*{Ponto fora do escopo}
+
+\paragraph{Prompt}
+\begin{quote}\small
+O TP não pede paralelismo e eu não sei fazer isso. Preciso rodar 150 execuções sem prender meu notebook por dias. Proponha uma solução e \textbf{explique cada decisão} (processos, afinidade de CPU, ordem das tarefas, retomada).
+\end{quote}
+
+\paragraph{Prompt}
+\begin{quote}\small
+Por que dois processos no mesmo núcleo físico distorcem meu tempo? Responda e eu confirmo com um teste.
+\end{quote}
+
+\subsection*{Planejamento e entendimento}
+
+\paragraph{Prompt}
+\begin{quote}\small
+Subestimei o tempo da rodada principal (pior caso de 25\,h). Reordene minhas prioridades sem mudar o protocolo experimental.
+\end{quote}
+
+\paragraph{Prompt}
+\begin{quote}\small
+Se eu trocar a ordem dos filhos para mais-distante-primeiro, o que acontece com o warm-start NN? Respondo antes de você. Depois explique por que o expoente do matching mede 2,7 e não 3.
+\end{quote}

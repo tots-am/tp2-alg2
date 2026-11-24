@@ -1,6 +1,4 @@
 % Relatório TP2 -- DCC207 Algoritmos 2 -- modelo SBC
-% Compilar no Overleaf a partir do "SBC Conferences Template" (traz sbc-template.sty e sbc.bst).
-% Ver report/README.md.  Marcadores "TODO" indicam trechos a revisar/completar pelo grupo.
 \documentclass[12pt]{article}
 
 \usepackage{sbc-template}
@@ -21,14 +19,14 @@
 \sloppy
 
 \title{Branch-and-Bound, Twice-around-the-tree e Christofides para o TSP Euclidiano:\\
-análise empírica de poda, complexidade e sensibilidade}
+análise empírica da poda, complexidade e da sensibilidade}
 
-\author{\todo{Nome 1}\inst{1}, \todo{Nome 2}\inst{1}, \todo{Nome 3}\inst{1}}
+\author{Tomás Almeida Moreira}
 
 \address{Departamento de Ciência da Computação\\
   Universidade Federal de Minas Gerais (UFMG)\\
   Belo Horizonte -- MG -- Brasil
-  \email{\todo{emails}}
+  \email{tomasmoreira@ufmg.br}
 }
 
 \begin{document}
@@ -36,7 +34,17 @@ análise empírica de poda, complexidade e sensibilidade}
 \maketitle
 
 \begin{abstract}
-  \todo{Abstract (inglês), até 10 linhas, escrito ao final.}
+  This work empirically evaluates an exact Branch-and-Bound and two approximation
+  algorithms (Twice-around-the-tree and Christofides) for the Euclidean Traveling
+  Salesman Problem on 15 TSPLIB-derived instances with 12 to 70 vertices. With a
+  Held-Karp lower bound, the Branch-and-Bound solved all 75 runs within 30 minutes,
+  whereas an MST bound timed out on 5 instances, from $N=22$ on. Among five
+  upper-bound warm-starts, a convex-hull insertion tour reduced expanded nodes 12-fold
+  and total time 2.1-fold; nearest neighbor and Twice-around-the-tree gave no gain,
+  because the depth-first search finds an equivalent tour on its first descent.
+  Profiling shows that the minimum-weight matching accounts for over 94\% of
+  Christofides' time, with empirical growth $N^{2.7}$. Geometric features correlate
+  with the approximation gap, but do not predict it out of sample.
 \end{abstract}
 
 \begin{resumo}
@@ -46,8 +54,15 @@ análise empírica de poda, complexidade e sensibilidade}
   vértices. Medimos o efeito de cinco estratégias de inicialização do limite superior
   (\textit{warm-start}) e de três cotas inferiores sobre a árvore de busca, ajustamos
   curvas de complexidade empírica às sub-rotinas instrumentadas e relacionamos
-  características geométricas das instâncias ao gap de aproximação.
-  \todo{completar com os principais números ao final.}
+  características geométricas das instâncias ao gap de aproximação. Com a cota de
+  Held-Karp, o B\&B resolveu as 75 execuções em menos de 30\,min, enquanto a cota de
+  árvore geradora mínima esgotou o tempo em 5 instâncias, a partir de $N=22$. A
+  inicialização por fecho convexo com inserção reduziu os nós expandidos em 12 vezes e o
+  tempo total em 2,1 vezes; vizinho mais próximo e Twice-around-the-tree não trouxeram
+  ganho, pois a busca em profundidade encontra um tour equivalente na primeira descida.
+  O emparelhamento perfeito responde por mais de 94\% do tempo do Christofides, com
+  crescimento empírico $N^{2,7}$. As \textit{features} geométricas se correlacionam com o
+  gap, mas não o predizem fora da amostra.
 \end{resumo}
 
 % ============================================================================
@@ -55,18 +70,17 @@ análise empírica de poda, complexidade e sensibilidade}
 
 O Problema do Caixeiro Viajante (TSP) pede o ciclo hamiltoniano de menor custo em um
 grafo completo ponderado. Sua versão de decisão é NP-completa, e mesmo o caso
-euclidiano é NP-difícil~\cite{applegate2006}. Na prática, isso abre duas frentes:
-algoritmos exatos, cujo tempo cresce exponencialmente mas cujo comportamento real depende
-fortemente da qualidade da poda, e algoritmos aproximados polinomiais com garantia de
-desempenho, como o \textit{Twice-around-the-tree} (fator 2) e o algoritmo de
-Christofides (fator 1{,}5)~\cite{christofides1976}, válidos quando os custos obedecem à
-desigualdade triangular.
+euclidiano é NP-difícil~\cite{applegate2006}. Há dois caminhos usuais. Os algoritmos
+exatos têm tempo exponencial no pior caso, mas o tempo real depende muito da qualidade
+da poda. Os algoritmos aproximados rodam em tempo polinomial e têm garantia de
+desempenho quando os custos obedecem à desigualdade triangular: fator 2 para o
+\textit{Twice-around-the-tree} e 1{,}5 para o algoritmo de
+Christofides~\cite{christofides1976}.
 
-O foco deste trabalho não é apenas implementar os algoritmos, mas auditar o
-comportamento das implementações: onde está o tempo e a memória de cada sub-rotina,
-quanto a escolha do limite superior inicial e da cota inferior altera a árvore de busca,
-e quais características geométricas das instâncias tornam as aproximações piores ou
-melhores. As contribuições são:
+Além de implementar os algoritmos, medimos como as implementações se comportam: quanto
+tempo e memória cada sub-rotina consome, quanto a escolha do limite superior inicial e
+da cota inferior muda a árvore de busca, e que características geométricas das
+instâncias pioram ou melhoram as aproximações. As contribuições são:
 \begin{itemize}
   \item uma implementação de Branch-and-Bound em C++11 com três cotas inferiores
         (ingênua, árvore geradora mínima e Held-Karp) e contagem de nós
@@ -86,23 +100,28 @@ e a Seção~\ref{sec:concl} conclui.
 
 O núcleo exato foi escrito em C++11 e é invocado como subprocesso por um
 \textit{harness} em Python~3, que contém as heurísticas, as aproximações, a extração
-de \textit{features} e a análise estatística. A divisão segue o gargalo: o
-Branch-and-Bound visita milhões de nós, e cada nó exige um cálculo de cota de custo
-$O(n^2)$, o que em Python puro seria interpretado operação a operação.
-
-\todo{Declarar aqui o uso de IA generativa (Claude Code) para geração de código e
-descrever o papel do grupo: revisão, decisões e refatorações (ver Tabela~\ref{tab:auditoria}).
-Ajustar o texto abaixo para refletir o que o grupo de fato verificou e entende.}
+de \textit{features} e a análise estatística. O C++ ficou com a parte cara: o
+Branch-and-Bound visita milhões de nós, cada um com um cálculo de cota de custo
+$O(n^2)$, e em Python puro cada operação desse cálculo seria interpretada.
+A IA generativa foi usada para gerar o esqueleto de parte do código, mas não para 
+escrever a lógica dos algoritmos. O código final foi revisado e refatorado manualmente, 
+e a auditoria documenta as decisões de projeto. Devido a uma constrição de tempo (eu não 
+podia deixar meu computador rodando por vários dias, pois preciso dele para trabalhar), a 
+refatoração do código para que ele pudesse rodar mais rápido usando o paralelismo, foi 
+feita por IA, uma vez que eu não conseguiria, em tempo hábil, aprender esse conhecimento 
+para implementar algo que eu nunca tinha feito antes (dividir processamento entre vários núcleos),
+e entregar o trabalho no prazo. Para mais detalhes, ver a Tabela~\ref{tab:auditoria}. E o anexo de 
+prompts.
 
 \subsection{Branch-and-Bound}
 
 \paragraph{Estratégia de busca.} Usamos busca em profundidade (DFS) com o vértice
 inicial fixo em $0$ e filhos ordenados pela distância ao último vértice do caminho
-(vizinho mais próximo primeiro). A busca \textit{best-first} foi descartada: sua fila de
-prioridade cresce exponencialmente e esgotaria a memória da máquina (7\,GB) já em
-$N \approx 30$, enquanto a DFS mantém apenas o caminho corrente, $O(n)$. O estado é
-incremental: um vetor de caminho e um vetor de visitados, desfeitos no retorno da
-recursão, sem cópias de matriz ou de estruturas por nó.
+(vizinho mais próximo primeiro). Descartamos a busca \textit{best-first} porque sua fila
+de prioridade cresce exponencialmente e esgotaria a memória da máquina (7\,GB) por volta
+de $N \approx 30$. A DFS guarda só o caminho corrente, em $O(n)$. O estado é um vetor de
+caminho e um vetor de visitados, atualizados na descida e desfeitos no retorno da
+recursão; nenhum nó copia matriz ou outra estrutura.
 
 \paragraph{Cotas inferiores.} Para um caminho parcial $v_0 \to \dots \to v_k$ com
 conjunto $U$ de vértices não visitados:
@@ -115,21 +134,28 @@ conjunto $U$ de vértices não visitados:
         $LB = c(\text{caminho}) + \text{MST}(U) + \min_{u} d(v_k,u) + \min_{u} d(u,v_0)$,
         calculada com Prim denso $O(|U|^2)$;
   \item \textbf{hk}: a mesma cota sobre custos $d'(i,j) = d(i,j) + \pi_i + \pi_j$, com
-        as penalidades $\pi$ de Held-Karp~\cite{heldkarp1970,heldkarp1971} obtidas
-        \emph{uma vez} na raiz por subgradiente sobre 1-trees. A cota é válida para
+        as penalidades $\pi$ de Held-Karp~\cite{heldkarp1970,heldkarp1971}, calculadas
+        uma vez, na raiz, por subgradiente sobre 1-trees. A cota vale para
         qualquer $\pi$:
         $LB = LB'(\text{resto}) - \pi_{v_k} - \pi_{v_0} - 2\sum_{u\in U}\pi_u$.
 \end{itemize}
-O passo do subgradiente foi feito propositalmente independente do limite superior, para
-que a estratégia de \textit{warm-start} influencie a busca \emph{apenas} pela poda,
-isolando a variável do experimento. Como os custos são inteiros, um nó é podado quando
-$\lceil LB \rceil \ge UB$.
+O passo do subgradiente não depende do limite superior. Assim, o \textit{warm-start}
+afeta a busca só pela poda, que é a variável que queremos medir. Como os custos são
+inteiros, um nó é podado quando $\lceil LB \rceil \ge UB$.
 
 \paragraph{Instrumentação.} O binário reporta nós expandidos, nós podados, folhas,
 atualizações do limite superior, profundidade máxima, cota na raiz, tempo até a melhor
 solução, tempo estimado na função de cota (amostragem de 1 a cada 256 chamadas) e pico
 de memória (\texttt{getrusage}). O limite de 30\,min é verificado dentro da busca, de
 modo que execuções interrompidas (registradas como NA) preservam os contadores.
+
+A medida de memória saiu errada na rodada principal. No Linux, \texttt{ru\_maxrss}
+sobrevive ao \texttt{exec}, e o binário lançado pelo \textit{harness} herda o pico do
+processo Python que o criou: todas as 150 execuções reportaram de 35 a 36\,MB, sem
+relação com $N$. Medido isoladamente, o binário ocupa 3,0\,MB numa instância com $N=3$
+e 3,1\,MB na eil51 (44\,554 nós expandidos). Quase todo esse pico vem do
+\textit{runtime} do C++, e o valor praticamente constante é o esperado para uma DFS com
+memória $O(n)$.
 
 \subsection{Heurísticas de inicialização e algoritmos aproximados}
 
@@ -152,15 +178,17 @@ modo que execuções interrompidas (registradas como NA) preservam os contadores
 
 Cada sub-rotina é cronometrada separadamente (\texttt{perf\_counter}, mediana de 5
 repetições). O pico de memória é medido com \texttt{tracemalloc} numa passada
-\emph{separada}, pois o rastreamento de alocações deixa o código de 2 a 3 vezes mais lento e
-distorceria os tempos. O profiling confirmou que o emparelhamento domina o Christofides:
-de 93\% a 98\% do tempo e também o pico de memória, porque o NetworkX representa o grafo
-completo dos $k$ vértices ímpares como $O(k^2)$ objetos Python.
-\todo{atualizar com números finais de scaling.csv.}
+separada, porque o rastreamento de alocações deixa o código de 2 a 3 vezes mais lento.
+No Christofides, a construção do grafo do emparelhamento e o emparelhamento somam 94\%
+do tempo em $N=50$, 99\% em $N=200$ e praticamente 100\% em $N=1000$. Nesse último
+tamanho, o Christofides leva 66\,s, e o Twice-around-the-tree, que usa a mesma MST,
+leva 0,03\,s. As duas etapas também ocupam quase toda a memória, porque o NetworkX
+representa o grafo completo dos $k$ vértices ímpares como $O(k^2)$ objetos Python: são
+cerca de 39\,MB em $N=1000$, contra 68\,KB da MST.
 
 \begin{table}[ht]
 \centering
-\caption{Decisões de auditoria e refatorações. \todo{revisar e completar pelo grupo.}}
+\caption{Decisões de auditoria e refatorações.}
 \label{tab:auditoria}
 \small
 \begin{tabular}{p{0.3\linewidth}p{0.62\linewidth}}
@@ -175,6 +203,7 @@ Isolamento do warm-start & Subgradiente de Held-Karp com passo independente do U
 Timeout & Interno à busca, preservando contadores em NA. \\
 MST & Prim denso $O(n^2)$ em vez de Kruskal/heap ($O(n^2\log n)$ em grafo completo). \\
 Medição de memória & \texttt{tracemalloc} em passada separada da cronometrada. \\
+Memória do B\&B & \texttt{ru\_maxrss} herdado do Python através do \texttt{exec} (35\,MB); remedido isoladamente: 3\,MB. \\
 Paralelismo & Processos (não threads, por causa do GIL), um por núcleo físico (\texttt{taskset}), maiores instâncias primeiro, resultados gravados incrementalmente (retomável). \\
 Curvas de escala & Medidas até $N=1000$: com $N \le 280$ o overhead fixo por chamada NumPy mascarava o termo assintótico. \\
 Feature de agrupamento & Clark-Evans com correção de borda de Donnelly~\cite{clarkevans1954,donnelly1978}. \\
@@ -186,27 +215,80 @@ Modelo de sensibilidade & Ridge e validação cruzada por instância (a regress�
 % ============================================================================
 \section{Metodologia Experimental}\label{sec:metodo}
 
-\paragraph{Instâncias.} A TSPLIB~\cite{reinelt1991} não contém instâncias EUC\_2D com
-$N \le 40$; as citadas no enunciado são dos tipos GEO, ATT ou EXPLICIT. Como as
-\textit{features} geométricas exigem coordenadas, usamos: (i) instâncias com coordenadas
+\paragraph{Instâncias.} A TSPLIB~\cite{reinelt1991} não tem instâncias EUC\_2D com
+$N \le 40$; as citadas no enunciado são dos tipos GEO, ATT ou EXPLICIT. As
+\textit{features} geométricas precisam de coordenadas, então usamos (i) instâncias com coordenadas
 (\texttt{NODE\_COORD} ou \texttt{DISPLAY\_DATA}) cujas distâncias foram
 \emph{recalculadas} como EUC\_2D, $d(i,j) = \text{nint}(\lVert p_i - p_j \rVert)$, com
 coordenadas GEO multiplicadas por 100 para preservar precisão; e (ii) recortes formados
 pelos $K$ primeiros pontos de instâncias EUC\_2D maiores, escolhidas por geometria
 (uniforme, agrupada, alinhada, em grade). O conjunto tem 15 instâncias, 12 (80\%) com
-$N \le 40$ e 3 de estresse (att48, eil51, st70). O ótimo publicado só vale para eil51 e
-st70; nas demais, o ótimo de referência é o obtido pelo próprio Branch-and-Bound.
-\todo{tabela com a lista de instâncias, N e origem.}
+$N \le 40$ e 3 de estresse (att48, eil51, st70), listadas na Tabela~\ref{tab:instancias}.
+O ótimo publicado só vale para eil51 e st70, as únicas originalmente EUC\_2D e sem
+recorte; nas demais, o ótimo de referência é o encontrado pelo próprio Branch-and-Bound.
+Nas duas, o B\&B chegou aos valores da TSPLIB (426 e 675), o que confere tanto a
+implementação quanto o recálculo das distâncias.
+
+\begin{table}[ht]
+\centering
+\caption{Instâncias de teste. ``Recorte $K$'': os $K$ primeiros pontos da instância
+original. O ótimo é o custo EUC\_2D recalculado, provado pelo B\&B com cota \textit{hk}.}
+\label{tab:instancias}
+\small
+\begin{tabular}{lrllr}
+\toprule
+Instância & $N$ & Origem & Geometria & Ótimo \\
+\midrule
+kroA100\_k12 & 12 & recorte de kroA100 (EUC\_2D) & uniforme & 9\,775 \\
+burma14 & 14 & GEO $\to$ EUC\_2D & geográfica & 3\,087 \\
+ulysses16 & 16 & GEO $\to$ EUC\_2D & alongada & 7\,398 \\
+berlin52\_k20 & 20 & recorte de berlin52 (EUC\_2D) & urbana & 5\,270 \\
+ulysses22 & 22 & GEO $\to$ EUC\_2D & alongada & 7\,529 \\
+kroB100\_k25 & 25 & recorte de kroB100 (EUC\_2D) & uniforme & 11\,960 \\
+bayg29 & 29 & EXPLICIT (\texttt{DISPLAY\_DATA}) & geográfica & 9\,073 \\
+bier127\_k30 & 30 & recorte de bier127 (EUC\_2D) & agrupada & 17\,900 \\
+a280\_k33 & 33 & recorte de a280 (EUC\_2D) & alinhada (circuito) & 457 \\
+pr76\_k35 & 35 & recorte de pr76 (EUC\_2D) & irregular & 44\,237 \\
+lin105\_k38 & 38 & recorte de lin105 (EUC\_2D) & grade & 5\,568 \\
+eil101\_k40 & 40 & recorte de eil101 (EUC\_2D) & uniforme & 413 \\
+att48 & 48 & ATT $\to$ EUC\_2D & geográfica & 33\,522 \\
+eil51 & 51 & EUC\_2D & uniforme & 426 \\
+st70 & 70 & EUC\_2D & uniforme & 675 \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \paragraph{Ambiente.} Intel Core i5-10210U (4 núcleos físicos), 7\,GB de RAM, WSL2/Ubuntu
 22.04, g++ 11.4 (\texttt{-O3 -march=native}), Python 3.10, NumPy 2.2, NetworkX 3.4,
 scikit-learn 1.7. Três execuções do B\&B em paralelo, cada uma fixada em um núcleo físico
-distinto, com prioridade reduzida (\texttt{nice}). \todo{confirmar.}
+distinto (\texttt{taskset}, CPUs lógicas 0, 2 e 4), com prioridade reduzida
+(\texttt{nice -n 10}). O quarto núcleo ficou livre porque a máquina continuou em uso
+durante a rodada. Com um processo por núcleo físico, dois processos nunca dividem o
+mesmo núcleo por \textit{hyper-threading}, o que alteraria os tempos. As 150 execuções
+levaram 5\,h\,21\,min.
 
 \paragraph{Protocolo.} Para cada instância, estratégia de \textit{warm-start} e cota
 (\textit{hk} e \textit{mst}), uma execução do B\&B com limite de 30\,min. O tempo total
 de cada estratégia é o tempo da heurística mais o tempo da busca. Para as curvas de
-complexidade das heurísticas, usamos recortes de $N=50$ a $1000$ da pr1002.
+complexidade das heurísticas, usamos recortes de $N=50$ a $1000$ da pr1002, com passo
+50 e mediana de 3 repetições. A cota \textit{naive} só foi usada nos testes preliminares
+com pontos aleatórios (Tabela~\ref{tab:auditoria}): como ela colapsa por volta de
+$N \approx 25$, ficou fora da rodada principal.
+
+\paragraph{Ajustes de complexidade.} Para cada sub-rotina, ajustamos
+$t = a + b\,g(N)$ com $g \in \{N, N\log N, N^2, N^2\log N, N^3\}$ por mínimos quadrados
+não negativos. Cada observação tem peso $1/t$, de modo que o ajuste minimiza o erro
+relativo; sem esse peso, os poucos pontos com $N$ grande decidiriam o ajuste sozinhos.
+Escolhemos o modelo de maior $R^2$ em escala log. Ajustamos também a lei de potência
+$t = aN^b$ por regressão em log-log, com intervalo de confiança de 95\% para $b$.
+
+\paragraph{Sensibilidade.} O gap de cada aproximação é $(\text{custo} -
+\text{ótimo})/\text{ótimo}$. Calculamos a correlação de Spearman de cada
+\textit{feature} com o gap de cada algoritmo. Depois treinamos uma árvore de decisão
+(profundidade 3) e uma regressão Ridge, validadas deixando uma instância inteira de
+fora, em duas versões: \emph{bruta}, com o algoritmo como variável indicadora, e
+\emph{centrada}, em que se subtrai de cada gap a média do seu algoritmo e o modelo usa só
+as \textit{features}.
 
 % ============================================================================
 \section{Resultados}\label{sec:res}
@@ -228,15 +310,76 @@ com a curva teórica de melhor ajuste.}
 \restable{complexidade_melhor_ajuste}
 \end{table}
 
-\todo{Discutir: expoentes vs. teoria; overhead do NumPy em $N$ pequeno; o matching do
-NetworkX ($O(k^3)$, objetos Python) vs. as sub-rotinas vetorizadas; memória
-(Figura complexidade\_memoria); \textit{garbage collection}.}
+A Tabela~\ref{tab:complexidade} compara cada sub-rotina com a sua complexidade teórica.
+As duas sub-rotinas cúbicas se comportam como a teoria prevê. O emparelhamento tem
+expoente $b = 2{,}70 \pm 0{,}09$ e melhor ajuste $N^3$ ($R^2_{\log} = 0{,}985$), como
+se espera do blossom $O(k^3)$ sobre os $k$ vértices ímpares da MST, já que $k$ cresce
+proporcionalmente a $N$. O expoente fica abaixo de 3 porque termos de ordem menor ainda
+pesam na faixa medida. A inserção mais barata tem $b = 2{,}50 \pm 0{,}22$ e melhor
+ajuste $N^3$, e a construção do grafo do emparelhamento, quadrática em $k$, tem
+$b = 2{,}01$.
+
+Já as sub-rotinas quadráticas vetorizadas ficam longe do expoente teórico até
+$N = 1000$: o Prim denso tem $b = 1{,}27$ e o vizinho mais próximo, $b = 1{,}32$,
+ambos $O(N^2)$ na teoria. Cada uma faz $N$ iterações, e cada iteração chama o NumPy
+sobre um vetor de tamanho $N$, com custo $c_0 + c_1 N$. Nessa faixa, o
+\textit{overhead} fixo $c_0$ de cada chamada (alguns microssegundos) ainda é maior que
+o trabalho vetorial $c_1 N$. É por isso que o critério de seleção escolhe $N \log N$
+para o Prim; com $N$ maior, o termo quadrático apareceria. O ruído na escala de
+microssegundos também explica o $R^2$ linear baixo do vizinho mais próximo (0,52). Em
+números absolutos, o Twice-around-the-tree completo leva 0,03\,s em $N = 1000$, e o
+Christofides, 66\,s.
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=0.75\linewidth]{complexidade_memoria}
+\caption{Pico de memória (\texttt{tracemalloc}) das sub-rotinas em função de $N$.}
+\label{fig:memoria}
+\end{figure}
 
 \begin{table}[ht]
 \centering
-\caption{Crescimento exponencial do B\&B (warm-start Christofides): fator multiplicativo por vértice.}
+\caption{Lei de potência do pico de memória ($m = aN^b$) e pico em $N=1000$.}
+\label{tab:memoria}
+\restable{complexidade_memoria}
+\end{table}
+
+Na memória (Figura~\ref{fig:memoria}, Tabela~\ref{tab:memoria}), a diferença entre as
+representações é ainda maior que no tempo. A MST guarda só vetores de tamanho $N$
+($b = 1{,}17$, 68\,KB em $N=1000$). A inserção mantém uma matriz $N \times N$ de custos
+de inserção ($b = 1{,}96$, 10\,MB). O grafo do emparelhamento no NetworkX cresce com
+expoente parecido ($b = 2{,}06$), mas ocupa 39\,MB, porque cada uma das
+$\approx k^2/2$ arestas é um dicionário Python e custa muito mais que uma entrada de
+matriz.
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=\linewidth]{bnb_crescimento}
+\caption{Nós expandidos (esq.) e tempo (dir.) do B\&B com \textit{warm-start}
+Christofides, em escala log, com o ajuste exponencial de cada cota. Marcadores vazados:
+execuções interrompidas em 30\,min, fora do ajuste.}
+\label{fig:crescimento}
+\end{figure}
+
+\begin{table}[ht]
+\centering
+\caption{Crescimento exponencial do B\&B (\textit{warm-start} Christofides): fator
+multiplicativo por vértice adicional, ajustado sobre as instâncias resolvidas.}
+\label{tab:crescimento}
 \restable{bnb_crescimento}
 \end{table}
+
+O tempo do Branch-and-Bound cresce exponencialmente com $N$
+(Figura~\ref{fig:crescimento}, Tabela~\ref{tab:crescimento}): cada vértice a mais
+multiplica o tempo por 1,28, em média, com a cota \textit{hk}, e por 1,40 com a
+\textit{mst}. Os pontos se espalham bastante em torno da reta (RMSE de 0,55 décadas
+para a \textit{hk} e de 1,0 para a \textit{mst}), porque a geometria pesa tanto quanto
+$N$. Com a cota \textit{hk}, a lin105\_k38 ($N=38$) é resolvida em 0,03\,s e a
+eil101\_k40 ($N=40$) em 1,5\,s; a eil51 leva 5\,s e a st70, 609\,s. Extrapolando o
+ajuste a partir da st70, a cota \textit{hk} chegaria ao limite de 30\,min por volta de
+$N \approx 75$. Com a \textit{mst}, o colapso acontece dentro do próprio conjunto de
+teste e varia com a instância: a ulysses22 ($N=22$) não termina em 30\,min, e a
+lin105\_k38 ($N=38$) termina em 6\,min.
 
 \subsection{Impacto do warm-start na árvore de busca}
 
@@ -251,16 +394,88 @@ NetworkX ($O(k^3)$, objetos Python) vs. as sub-rotinas vetorizadas; memória
 \begin{table}[ht]
 \centering
 \caption{Resumo por cota e estratégia (médias geométricas sobre instâncias resolvidas por todas as estratégias).}
+\label{tab:warmstart}
 \restable{warmstart_resumo}
 \end{table}
 
-\todo{Discutir: (i) trivial $\approx$ vizinho mais próximo, porque a DFS ordenada pelo
-vizinho mais próximo encontra o tour NN no primeiro mergulho; (ii) o fecho convexo
-frequentemente já é ótimo e reduz drasticamente a árvore (st70/hk: 3{,}8M $\to$ 0{,}15M nós);
-(iii) trade-off tempo da heurística $\times$ poda; (iv) diferença entre as cotas;
-(v) ponto de colapso.}
+\begin{figure}[ht]
+\centering
+\includegraphics[width=0.6\linewidth]{warmstart_tradeoff}
+\caption{Gap do limite superior inicial contra a razão de nós expandidos em relação ao
+início trivial (cota \textit{hk}, eixo $x$ em escala symlog).}
+\label{fig:tradeoff}
+\end{figure}
+
+\paragraph{Vizinho mais próximo e Twice-around-the-tree.} Com a cota \textit{hk}, essas
+duas estratégias expandem 99,5\% e 99,8\% dos nós do início trivial
+(Tabela~\ref{tab:warmstart}), embora partam de tours com gap médio de 21\% e 28\%,
+contra 146\% do trivial. Como a DFS visita os filhos do mais próximo para o mais
+distante, o primeiro ramo que ela percorre é o tour do vizinho mais próximo a partir do
+vértice 0. Depois de $N$ nós, a busca trivial já tem esse limite superior, e o
+\textit{warm-start} NN economiza só essa primeira descida; na bier127\_k30, são 8 nós a
+menos em 306\,303. O Twice-around-the-tree é pior que o vizinho mais próximo em 12 das
+15 instâncias. Nesses casos, a primeira descida já encontra um tour melhor que o dele,
+e em 11 dos 12 a árvore fica igual à do trivial (306\,303 nós também na bier127\_k30);
+na a280\_k33, a diferença é de 6 nós em 533.
+
+\paragraph{Fecho convexo.} A inserção a partir do fecho convexo produz tours com gap
+médio de 2,2\% e acerta o ótimo em 4 das 15 instâncias. Nessas 4, só a raiz é
+expandida, porque todos os filhos já têm $\lceil LB \rceil \ge UB$. Em média
+geométrica, a estratégia expande 8,4\% dos nós do trivial e reduz o tempo total
+(heurística mais busca) em 2,1 vezes. Na st70, a instância mais difícil, a árvore cai
+de 3,8 milhões para 151 mil nós, e o tempo, de 541\,s para 69\,s. Na
+Figura~\ref{fig:tradeoff}, a poda só melhora com gap inicial abaixo de cerca de 10\%,
+que é aproximadamente o gap do tour que a DFS encontra sozinha.
+
+\paragraph{Christofides.} Com gap médio de 8,7\%, o Christofides reduz os nós para 67\%
+dos do trivial, e em alguns casos a redução é grande: 24 vezes na bier127\_k30
+(306\,303 $\to$ 12\,580 nós). No tempo total, o ganho é de só 3\%. A cota \textit{hk}
+resolve a maior parte das instâncias em milissegundos, e os 6,6\,ms do emparelhamento
+consomem o que a busca economiza. Esse \textit{warm-start} só compensa quando a busca
+demora o bastante para amortizar a heurística. A inserção leva 1,5\,ms e dá o melhor
+limite, então ganha nos dois critérios.
+
+\paragraph{Cota mst.} Com a cota \textit{mst}, a estratégia de \textit{warm-start} quase
+não faz diferença. O fecho convexo, a melhor delas, ainda expande 83\% dos nós do
+trivial, e as 5 instâncias que esgotam o tempo esgotam com todas as 5 estratégias. Na
+raiz, a \textit{hk} fica de 0,1\% a 4,9\% abaixo do ótimo, e a \textit{mst}, de 10\%
+a 33\%. Com uma cota tão frouxa, a maioria dos nós tem $LB$ bem abaixo do ótimo, e
+nenhum limite superior os poda, nem o próprio ótimo. O caso extremo é a ulysses22, que
+tem a maior folga da \textit{mst} (33\%) e a menor da \textit{hk} (0,1\%). A
+\textit{hk} a resolve em 8\,ms; a \textit{mst} expande $8{,}4 \times 10^8$ nós em
+30\,min sem provar a otimalidade, embora já tivesse o ótimo (7\,529) como incumbente.
+Nas outras execuções interrompidas, o incumbente final varia: a eil51 termina a 1
+unidade do ótimo, e a st70 termina 8,7\% acima com o início trivial e 3,9\% acima com o
+fecho convexo.
 
 \subsection{Análise de sensibilidade}
+
+As \textit{features} descrevem a geometria de cada instância. \texttt{aspect\_ratio} é a
+razão entre os lados da caixa envolvente. \texttt{hull\_ratio} é a fração de pontos no
+fecho convexo. \texttt{clark\_evans\_R} é o índice de agrupamento de Clark-Evans:
+abaixo de 1 indica pontos agrupados, acima de 1, pontos regulares. A janela usada é o
+fecho, o que dá ao índice um viés positivo para $N$ pequeno; por isso, ele só serve para
+comparar instâncias.
+\texttt{spatial\_entropy} é a entropia normalizada da ocupação de uma grade.
+\texttt{nn\_cv} e \texttt{dist\_cv} são os coeficientes de variação das distâncias ao
+vizinho mais próximo e de todas as distâncias. As três \textit{features}
+\texttt{mst\_*} vêm da MST: o grau máximo, a fração de vértices de grau ímpar e o
+coeficiente de variação das arestas.
+
+\begin{table}[ht]
+\centering
+\caption{Gap de cada algoritmo em relação ao ótimo ((custo $-$ ótimo)/ótimo).}
+\label{tab:gaps}
+\restable{gaps}
+\end{table}
+
+Os gaps ficaram bem abaixo das garantias teóricas (Tabela~\ref{tab:gaps}). O pior caso do
+Twice-around-the-tree é 42\%, na eil51, para uma garantia de 100\%; o do Christofides é
+18\%, na eil101\_k40, para uma garantia de 50\%. Em média, o Christofides fica a
+8,7\% do ótimo e o Twice-around-the-tree a 27,7\%. A heurística de inserção a partir do
+fecho convexo, sem garantia constante, é melhor que as duas em 13 das 15 instâncias,
+com média de 2,2\%. As exceções são ulysses16 e lin105\_k38, em que o Christofides a
+supera por menos de 0,4 ponto percentual.
 
 \begin{figure}[ht]
 \centering
@@ -272,17 +487,78 @@ frequentemente já é ótimo e reduz drasticamente a árvore (st70/hk: 3{,}8M $\
 \begin{table}[ht]
 \centering
 \caption{Desempenho dos modelos de sensibilidade (validação cruzada deixando uma instância de fora).}
+\label{tab:modelos}
 \restable{sensibilidade_modelos}
 \end{table}
 
-\todo{Discutir as features mais importantes (árvore e coeficientes Ridge, versão
-centrada por algoritmo); limitações com 15 instâncias; casos adversariais específicos
-(ex.: a280\_k33 com razão de aspecto 4{,}95, lin105\_k38 em grade).}
+\paragraph{Correlações.} Na Figura~\ref{fig:spearman}, cada algoritmo responde a
+\textit{features} diferentes. O gap do Christofides é maior em instâncias espalhadas de
+modo uniforme: tem correlação $+0{,}83$ com a entropia espacial e $-0{,}87$ com a
+dispersão das distâncias (\texttt{dist\_cv}), e cresce com a fração de vértices ímpares
+na MST ($+0{,}63$). Com mais vértices ímpares, o emparelhamento acrescenta mais arestas
+ao circuito euleriano, e o circuito precisa de mais atalhos. Em instâncias agrupadas ou
+alongadas, a MST se parece mais com um caminho e tem menos vértices ímpares. O gap do
+Twice-around-the-tree e o da inserção a partir do fecho crescem com $N$ ($+0{,}70$ e
+$+0{,}71$) e caem em instâncias alongadas (\texttt{aspect\_ratio}, de $-0{,}60$ a
+$-0{,}64$, o mesmo valendo para o Christofides). Quando os pontos estão quase
+alinhados, a pré-ordem da MST se aproxima de um percurso de ida e volta, que é
+quase ótimo. O vizinho mais próximo não tem nenhuma correlação significativa.
+
+\paragraph{Casos específicos.} A a280\_k33, uma placa de circuito com pontos alinhados
+e a maior razão de aspecto (4,95), tem os resultados mais desiguais: o Christofides
+fica a 2,4\% e o fecho a 0\%, enquanto o vizinho mais próximo e o
+Twice-around-the-tree ficam a 31\% e 32\%. Com os pontos em fileiras, as escolhas
+gulosas deixam vértices isolados para trás. A lin105\_k38, em grade, tem muitas
+distâncias empatadas, mas o Christofides fica a 3,6\% e o B\&B com cota \textit{hk} a
+resolve em 0,03\,s. O pior caso do Christofides (18\%) é a eil101\_k40, uniforme e com
+entropia de 0,98.
+
+\paragraph{Modelos preditivos.} Na versão bruta, árvore e Ridge chegam a $R^2 \approx
+0{,}54$ na validação cruzada (Tabela~\ref{tab:modelos}), mas quase todo esse poder vem
+da identidade do algoritmo: na árvore, as indicadoras de Twice-around-the-tree e de
+vizinho mais próximo somam 77\% da importância. A versão centrada testa se a geometria
+explica o desvio de cada algoritmo em relação à sua própria média, e o $R^2$ de
+validação é $\approx -0{,}03$, sem poder preditivo fora da amostra. A árvore ainda
+separa as instâncias por $N \le 23$ e usa \texttt{mst\_edge\_cv} e
+\texttt{mst\_odd\_frac}, mas esse ajuste ($R^2 = 0{,}29$ no treino) não generaliza.
+
+Com 15 instâncias, esse resultado já era provável, e as correlações acima servem como
+hipóteses a testar. As \textit{features} são correlacionadas entre si
+(\texttt{hull\_ratio}, por exemplo, cai naturalmente com $N$), e cada algoritmo responde
+a \textit{features} diferentes, o que enfraquece um modelo único. Além disso, foram 40
+testes de Spearman, e ao nível de 5\% cerca de 2 dariam significativos só por acaso.
+Para confirmar os efeitos, seria preciso gerar instâncias com geometria controlada,
+variando uma \textit{feature} por vez.
 
 % ============================================================================
 \section{Conclusões}\label{sec:concl}
 
-\todo{Resumo das descobertas empíricas.}
+Com as penalidades de Held-Karp calculadas uma única vez na raiz, o B\&B resolveu as 15
+instâncias, até $N=70$, dentro do limite de 30\,min. Com a cota de MST pura, 5
+instâncias esgotaram o tempo, a primeira com $N=22$. Na raiz, a folga da \textit{hk}
+foi de 0,1\% a 4,9\%, e a da \textit{mst}, de 10\% a 33\%; essa diferença pesou mais
+na poda que qualquer \textit{warm-start}.
+
+Numa DFS que visita primeiro o vizinho mais próximo, iniciar com o tour do vizinho mais
+próximo ou do Twice-around-the-tree não muda a busca, porque ela encontra um tour pelo
+menos tão bom na primeira descida. Só limites melhores que esse tour guloso aumentaram a
+poda. A inserção a partir do fecho convexo, barata e quase ótima, reduziu a árvore em
+12 vezes. O Christofides reduziu os nós em 33\%, mas a busca nessas instâncias é tão
+rápida que o custo do emparelhamento anulou o ganho de tempo.
+
+O emparelhamento ocupa mais de 94\% do tempo do Christofides e quase toda a sua memória,
+com crescimento empírico $N^{2,7}$. As sub-rotinas quadráticas vetorizadas ainda não
+mostram o expoente teórico até $N=1000$, por causa do \textit{overhead} de cada chamada
+ao NumPy.
+
+Na prática, os gaps ficaram bem abaixo das garantias: 18\% no pior caso do Christofides
+e 42\% no do Twice-around-the-tree. As correlações entre geometria e gap fazem sentido
+para cada algoritmo, mas 15 instâncias não bastaram para um modelo preditivo.
+
+Três extensões seguem destes resultados: atualizar as penalidades de Held-Karp ao longo
+da árvore, para levar o colapso além de $N \approx 75$; trocar o emparelhamento do
+NetworkX por uma implementação compilada ou gulosa; e gerar instâncias sintéticas com
+geometria controlada para a análise de sensibilidade.
 
 \bibliographystyle{sbc}
 \bibliography{refs}
