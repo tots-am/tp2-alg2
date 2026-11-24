@@ -303,7 +303,8 @@ def warmstart(b, ref):
 
     # figura: nós expandidos por instância, uma coluna por estratégia, painel por cota
     bounds = [x for x in ("hk", "mst") if x in set(b.bound)]
-    fig, axes = plt.subplots(len(bounds), 1, figsize=(9, 3.0 * len(bounds)), squeeze=False)
+    fig, axes = plt.subplots(len(bounds), 1, figsize=(9, 3.0 * len(bounds)), squeeze=False,
+                             sharex=True)
     order = ref.sort_values("n").instance.tolist()
     for ax, bound in zip(axes[:, 0], bounds):
         g = b[b.bound == bound]
@@ -318,9 +319,9 @@ def warmstart(b, ref):
             ax.bar(xs[~ok], d.nodes_expanded.to_numpy()[~ok], w * 0.88, color="white",
                    edgecolor=COLOR[s], hatch="////", linewidth=0.8)
         ax.set_yscale("log")
-        ax.set_ylim(bottom=1)
+        ax.set_ylim(bottom=0.5)  # 1 nó (fecho já ótimo) fica visível como barra curta
         ax.set_xticks(x)
-        ax.set_xticklabels(order, rotation=40, ha="right", fontsize=7)
+        ax.tick_params(axis="x", labelbottom=False)
         ax.set_ylabel("nós expandidos")
         ax.set_title(f"Cota {bound} (hachurado = NA, contagem até o corte)", color=INK, fontsize=9, loc="left")
         ax.grid(axis="x", visible=False)
@@ -328,6 +329,8 @@ def warmstart(b, ref):
     from matplotlib.patches import Patch
     handles = [Patch(facecolor=COLOR[s], label=LABEL[s]) for s in STRATS]
     handles.append(Patch(facecolor="white", edgecolor=INK2, hatch="////", label="NA (tempo esgotado)"))
+    axes[-1, 0].tick_params(axis="x", labelbottom=True)
+    axes[-1, 0].set_xticklabels(order, rotation=40, ha="right", fontsize=7)
     axes[0, 0].legend(handles=handles, ncol=6, fontsize=7, loc="upper left", bbox_to_anchor=(0, 1.25))
     _save(fig, "warmstart_nos")
 
@@ -337,7 +340,10 @@ def warmstart(b, ref):
         d = b[(b.strategy == s) & b.solved & (b.bound == bounds[0])]
         ax.semilogy(d.ub0_gap * 100, d.nodes_vs_trivial, MARK[s], color=COLOR[s], label=LABEL[s])
     ax.axhline(1, color=INK2, lw=0.8, ls="--")
-    ax.set_xlabel("gap do limite superior inicial (%)")
+    # symlog: o trivial (gap 100-400%) não esmaga as heurísticas boas (gap 0-40%)
+    ax.set_xscale("symlog", linthresh=1)
+    ax.set_xlim(-0.3, 800)
+    ax.set_xlabel("gap do limite superior inicial (%, escala symlog)")
     ax.set_ylabel("nós expandidos / trivial")
     ax.set_title(f"Cota {bounds[0]}", color=INK, fontsize=9, loc="left")
     ax.legend(fontsize=7)

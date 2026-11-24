@@ -26,7 +26,7 @@ status:
 	@echo "concluídos: `tail -n +2 results/bnb.csv | wc -l` de `grep -o '^[0-9]* jobs' results/bnb_run.log | tail -1`"
 	@echo "rodando agora:"
 	@ps -eo etime,args | grep '[b]nb/bnb --' | awk '{print "  " $$1 " decorridos, cota " $$4}'
-	@if pgrep -f run_experiments >/dev/null; then echo "situação: EM EXECUÇÃO"; else echo "situação: TERMINOU (ou foi interrompida)"; fi
+	@if pgrep -f "[r]un_experiments" >/dev/null; then echo "situação: EM EXECUÇÃO"; else echo "situação: TERMINOU (ou foi interrompida)"; fi
 	@echo "últimos resultados:"
 	@tail -n 5 results/bnb_run.log
 
