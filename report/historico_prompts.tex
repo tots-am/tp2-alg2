@@ -1,0 +1,155 @@
+% Anexo: histórico de prompts (uso de IA) -- TP2 DCC207 Algoritmos 2
+% Compila com pdflatex, lualatex ou xelatex.
+\documentclass[11pt,a4paper]{article}
+
+\usepackage{iftex}
+\ifPDFTeX
+  % pdfLaTeX
+  \usepackage[utf8]{inputenc}
+  \usepackage[T1]{fontenc}
+  \usepackage[brazil]{babel}
+  \usepackage{lmodern}
+  \IfFileExists{noto-sans.sty}{\usepackage{noto-sans}}{}
+\else
+  % LuaLaTeX / XeLaTeX
+  \usepackage{fontspec}
+  \IfFontExistsTF{Noto Sans}{%
+    \setmainfont{Noto Sans}%
+    \setsansfont{Noto Sans}%
+  }{}
+  \IfFontExistsTF{Noto Sans Mono}{\setmonofont{Noto Sans Mono}}{}
+  \usepackage{polyglossia}
+  \setmainlanguage{brazil}
+  \usepackage{unicode-math}
+  \setmathfont{Latin Modern Math}
+\fi
+\usepackage[a4paper,left=2.2cm,right=2.2cm,top=2.2cm,bottom=2.5cm]{geometry}
+\usepackage{microtype}
+\usepackage{titlesec}
+\usepackage[hidelinks]{hyperref}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0pt}
+\renewcommand{\familydefault}{\sfdefault}
+
+% Títulos: seção (grande, negrito) e rótulo (Prompt/Resposta/Decisão, pequeno, negrito)
+\titleformat{\section}{\Large\bfseries}{}{0pt}{}
+\titlespacing*{\section}{0pt}{1.6em}{0.6em}
+\newcommand{\rotulo}[1]{\vspace{0.9em}\noindent{\bfseries\small #1}\par\vspace{0.4em}}
+
+% Bloco de texto recuado
+\newenvironment{bloco}{%
+  \list{}{\leftmargin=0.5cm\rightmargin=0pt\itemsep=0pt\topsep=0pt\parsep=0pt\listparindent=0pt}%
+  \item\relax}{\endlist}
+
+\pagestyle{plain}
+
+\begin{document}
+
+\section*{Como usei a IA}
+\begin{bloco}
+Ferramenta: assistente de código claude code, em algumas sessões no vscode.\\
+Escrito por mim, em partes: rascunho do B\&B (DFS, cota naive), Prim denso, vizinho mais próximo, extração de features e roteiro experimental. Fiz o roadmap antes de abrir a ferramenta.\\
+Feito pela IA: revisão do meu código, sugestões avaliadas por mim, verificador por força bruta e, fora do escopo do TP, o executor paralelo.\\
+Regra: nenhuma alteração entrou sem o eu ler o que foi gerado e aprovar.
+\end{bloco}
+
+\section*{roadmap}
+\rotulo{Prompt}
+\begin{bloco}
+Estou fazendo o TP2 de Algoritmos 2 (TSP euclidiano: Branch-and-Bound, Twice-around-the-tree e Christofides). Antes de abrir qualquer arquivo, esta é a minha ordem de trabalho: (1) B\&B correto em $N$ pequeno (DFS, poda por $\lceil LB \rceil \geq UB$), validado contra força bruta, (2) heurísticas de \textit{warm-start} (trivial, vizinho mais próximo, fecho convexo, TAT, Christofides), (3) instrumentação por subrotina (tempo e memória), (4) experimentos com limite de 30\,min por execução, (5) análise (regressões, warm-start, sensibilidade) e relatório SBC.\\
+Minhas dúvidas, em ordem de importância: a ordem acima faz sentido, ou há uma dependência que não estou vendo? Ainda não sei quanto tempo a etapa 4 vai levar. Em C++ ou Python para o núcleo do B\&B? Quero os critérios de decisão, não só a resposta. Quais cotas inferiores vale testar? Conheço a naive e a de MST, e li que existe a de Held-Karp, mas não entendi o custo dela.\\
+Regras: não escreva código por enquanto e não altere nada. Eu escrevo o primeiro rascunho do B\&B e peço revisão depois. Se discordar de alguma decisão minha, diga o motivo antes de propor outra.
+\end{bloco}
+
+\rotulo{Decisão}
+\begin{bloco}
+P: A etapa 4 (experimentos) é o gargalo. Antecipar o planejamento dela?\\
+R: Sim. Vou estimar o tempo por instância ainda na etapa 1 e deixar o executor pronto antes das heurísticas.\\
+P: Qual linguagem para o núcleo do B\&B?\\
+R: C++11 para o núcleo, porque a cota é calculada milhões de vezes. Python fica para as heurísticas e a análise.\\
+P: Quais cotas testar?\\
+R: Naive e MST como base. A Held-Karp entra depois de eu medir a folga das duas na raiz, para justificar o custo extra.
+\end{bloco}
+
+\rotulo{Prompt}
+\begin{bloco}
+Decidi pelo C++ para o núcleo. Vou escrever o rascunho do B\&B com a cota naive. Quando terminar, envio o código para revisão.
+\end{bloco}
+
+\clearpage
+\section*{B\&B}
+\rotulo{Prompt}
+\begin{bloco}
+Escrevi um código em bnb.cpp (DFS, cota naive incremental, poda por $\lceil LB \rceil \geq UB$). Revise a corretude da poda e o tratamento do vértice inicial. Não reescreva nada: aponte problemas e diga por que são problemas.
+\end{bloco}
+
+\rotulo{Resposta}
+\begin{bloco}
+P: A cota ignora a aresta de retorno ao vértice 0. Posso mostrar um caso mínimo?\\
+R: Sim, mas só o caso. A correção eu faço (reproduzi com $N = 5$, entendi a causa e corrigi).
+\end{bloco}
+
+\rotulo{Prompt}
+\begin{bloco}
+Minha cota naive colapsa em $N \approx 25$. Antes de sugerir algo, diga qual propriedade da cota está frouxa.
+\end{bloco}
+
+\rotulo{Prompt}
+\begin{bloco}
+Você sugeriu best-first. Calcule o tamanho da fila para $N = 30$ antes de eu decidir.
+\end{bloco}
+
+\rotulo{Decisão}
+\begin{bloco}
+P: Manter DFS ou adotar best-first?\\
+R: Manter DFS: memória $O(n)$, a fila do best-first é exponencial e a máquina tem 7\,GB.
+\end{bloco}
+
+\section*{Validação independente}
+\rotulo{Prompt}
+\begin{bloco}
+Gere um verificador por força bruta para $N \leq 9$ e compare com meu B\&B em 50 instâncias aleatórias. Mostre as divergências antes de qualquer correção.
+\end{bloco}
+
+\rotulo{Prompt}
+\begin{bloco}
+Os resultados para eil51 e st70 devem bater com a TSPLIB (426 e 675). Se não baterem, quero a hipótese antes do conserto.
+\end{bloco}
+
+\section*{Sugestões avaliadas}
+\rotulo{Decisão}
+\begin{bloco}
+P: Usar Kruskal com heap para a MST?\\
+R: Não. Grafo completo: Prim denso $O(n^2)$ é melhor que $O(n^2 \log n)$.\\
+P: Fazer o passo do subgradiente depender do UB?\\
+R: Não. Acoplaria o warm-start à cota e contaminaria a medição.\\
+P: Medir memória com \texttt{tracemalloc} na mesma passada do tempo?\\
+R: Não. Deixa o código 2--3$\times$ mais lento e distorce o tempo.\\
+P: Recalcular a cota hk em cada nó?\\
+R: Adiar, fica como trabalho futuro.
+\end{bloco}
+
+\section*{Ponto fora do escopo}
+\rotulo{Prompt}
+\begin{bloco}
+O TP não pede paralelismo e eu não sei fazer isso. Preciso rodar 150 execuções sem prender meu notebook por dias. Proponha uma solução e explique cada decisão (processos, afinidade de CPU, ordem das tarefas, retomada).
+\end{bloco}
+
+\rotulo{Prompt}
+\begin{bloco}
+Por que dois processos no mesmo núcleo físico distorcem meu tempo? Responda e eu confirmo com um teste.
+\end{bloco}
+
+\section*{Planejamento e entendimento}
+\rotulo{Prompt}
+\begin{bloco}
+Subestimei o tempo da rodada principal (pior caso de 25\,h). Reordene minhas prioridades sem mudar o protocolo experimental.
+\end{bloco}
+
+\rotulo{Prompt}
+\begin{bloco}
+Se eu trocar a ordem dos filhos para mais-distante-primeiro, o que acontece com o warm-start NN? Respondo antes de você. Depois explique por que o expoente do matching mede 2,7 e não 3.
+\end{bloco}
+
+\end{document}

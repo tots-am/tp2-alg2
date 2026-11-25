@@ -31,3 +31,11 @@ status:
 	@tail -n 5 results/bnb_run.log
 
 .PHONY: venv heuristics bnb ablation status
+scaling: src/bnb/bnb
+	$(NICE) $(PY) -m src.run_experiments scaling
+
+analysis:
+	$(PY) -m src.analysis
+
+report:
+	cd report && pdflatex main && bibtex main && pdflatex main && pdflatex main

@@ -1,4 +1,6 @@
 % Relatório TP2 -- DCC207 Algoritmos 2 -- modelo SBC
+% Compilar: pdflatex main && bibtex main && pdflatex main && pdflatex main (ver README.md).
+% Marcadores "TODO" indicam trechos a revisar/completar pelo grupo.
 \documentclass[12pt]{article}
 
 \usepackage{sbc-template}
@@ -103,15 +105,17 @@ O núcleo exato foi escrito em C++11 e é invocado como subprocesso por um
 de \textit{features} e a análise estatística. O C++ ficou com a parte cara: o
 Branch-and-Bound visita milhões de nós, cada um com um cálculo de cota de custo
 $O(n^2)$, e em Python puro cada operação desse cálculo seria interpretada.
-A IA generativa foi usada para gerar o esqueleto de parte do código, mas não para 
-escrever a lógica dos algoritmos. O código final foi revisado e refatorado manualmente, 
-e a auditoria documenta as decisões de projeto. Devido a uma constrição de tempo (eu não 
-podia deixar meu computador rodando por vários dias, pois preciso dele para trabalhar), a 
-refatoração do código para que ele pudesse rodar mais rápido usando o paralelismo, foi 
-feita por IA, uma vez que eu não conseguiria, em tempo hábil, aprender esse conhecimento 
-para implementar algo que eu nunca tinha feito antes (dividir processamento entre vários núcleos),
-e entregar o trabalho no prazo. Para mais detalhes, ver a Tabela~\ref{tab:auditoria}. E o anexo de 
-prompts.
+Usei o Claude Code como assistente. Escrevi por conta própria o rascunho do
+Branch-and-Bound (DFS com cota \textit{naive}), o Prim denso, o vizinho mais próximo, a
+extração de \textit{features} e o roteiro experimental. A IA gerou, e eu revisei, a cota de
+Held-Karp, a inserção por fecho convexo, o Christofides, o executor paralelo, o
+\textit{profiler} e a análise estatística; também fez a revisão do meu código e o
+verificador por força bruta. Nenhuma alteração entrou sem que eu lesse e aprovasse o que
+foi gerado. O executor paralelo ficou a cargo da IA por restrição de tempo: a rodada
+levaria dias, a máquina era necessária para outros trabalhos, e eu não tinha experiência
+com paralelismo. A Tabela~\ref{tab:autoria} detalha a autoria, a Tabela~\ref{tab:auditoria}
+reúne as decisões de projeto, e o anexo apresenta os principais prompts em forma resumida
+(não há registro integral das conversas).
 
 \subsection{Branch-and-Bound}
 
@@ -208,6 +212,29 @@ Paralelismo & Processos (não threads, por causa do GIL), um por núcleo físico
 Curvas de escala & Medidas até $N=1000$: com $N \le 280$ o overhead fixo por chamada NumPy mascarava o termo assintótico. \\
 Feature de agrupamento & Clark-Evans com correção de borda de Donnelly~\cite{clarkevans1954,donnelly1978}. \\
 Modelo de sensibilidade & Ridge e validação cruzada por instância (a regressão linear comum sobreajustava: $R^2$ de validação negativo). \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[ht]
+\centering
+\caption{Autoria dos componentes (Claude Code como assistente).}
+\label{tab:autoria}
+\small
+\begin{tabular}{p{0.34\linewidth}p{0.18\linewidth}p{0.4\linewidth}}
+\toprule
+Componente & Autoria & Observação \\
+\midrule
+B\&B (DFS, cota \textit{naive}, poda) & Eu & Rascunho meu; a IA revisou a corretude da poda e do vértice inicial, e eu corrigi. \\
+Prim denso, vizinho mais próximo & Eu & \\
+Extração de \textit{features}, roteiro experimental & Eu & \\
+Cota de Held-Karp & IA, revisada por mim & Passo do subgradiente independente do UB: decisão minha. \\
+Inserção por fecho convexo & IA, revisada por mim & \\
+Christofides & IA, revisado por mim & \\
+\textit{Profiler} e análise estatística & IA, revisados por mim & \\
+Verificador por força bruta & IA & Comparação com o B\&B em instâncias aleatórias de $N \le 9$. \\
+Executor paralelo & IA & Fora do escopo do TP; eu não tinha experiência com paralelismo. \\
+Decisões de projeto & Minhas & DFS em vez de best-first, C++ para o núcleo, Prim em vez de Kruskal, \texttt{tracemalloc} em passada separada, cota \textit{hk} só na raiz. \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -349,8 +376,10 @@ representações é ainda maior que no tempo. A MST guarda só vetores de tamanh
 ($b = 1{,}17$, 68\,KB em $N=1000$). A inserção mantém uma matriz $N \times N$ de custos
 de inserção ($b = 1{,}96$, 10\,MB). O grafo do emparelhamento no NetworkX cresce com
 expoente parecido ($b = 2{,}06$), mas ocupa 39\,MB, porque cada uma das
-$\approx k^2/2$ arestas é um dicionário Python e custa muito mais que uma entrada de
-matriz.
+$\approx k^2/2$ arestas é um dicionário Python e custa muito mais que uma entrada de matriz. Desligar o coletor de lixo
+(\texttt{gc.disable()}) quase não alterou o tempo do emparelhamento
+(1,03\,s com GC e 1,07\,s sem, em $N=400$; 0,164\,s e 0,166\,s em $N=200$), então o custo vem da quantidade de
+objetos Python, e não das pausas do coletor.
 
 \begin{figure}[ht]
 \centering
@@ -431,17 +460,20 @@ que é aproximadamente o gap do tour que a DFS encontra sozinha.
 dos do trivial, e em alguns casos a redução é grande: 24 vezes na bier127\_k30
 (306\,303 $\to$ 12\,580 nós). No tempo total, o ganho é de só 3\%. A cota \textit{hk}
 resolve a maior parte das instâncias em milissegundos, e os 6,6\,ms do emparelhamento
-consomem o que a busca economiza. Esse \textit{warm-start} só compensa quando a busca
+consomem o que a busca economiza. Esse resultado depende da assimetria de implementação: o
+emparelhamento roda em Python/NetworkX e a busca em C++; com um emparelhamento compilado,
+o custo do \textit{warm-start} cairia. Esse \textit{warm-start} só compensa quando a busca
 demora o bastante para amortizar a heurística. A inserção leva 1,5\,ms e dá o melhor
 limite, então ganha nos dois critérios.
 
 \paragraph{Cota mst.} Com a cota \textit{mst}, a estratégia de \textit{warm-start} quase
 não faz diferença. O fecho convexo, a melhor delas, ainda expande 83\% dos nós do
-trivial, e as 5 instâncias que esgotam o tempo esgotam com todas as 5 estratégias. Na
-raiz, a \textit{hk} fica de 0,1\% a 4,9\% abaixo do ótimo, e a \textit{mst}, de 10\%
-a 33\%. Com uma cota tão frouxa, a maioria dos nós tem $LB$ bem abaixo do ótimo, e
+trivial, e as 5 instâncias que esgotam o tempo esgotam com todas as 5 estratégias. Na raiz, a cota usada pelo B\&B com \textit{hk} fica de 0,1\% a 4,9\% abaixo do ótimo, e a
+\textit{mst}, de 10\% a 33\%. A cota de 1-tree de Held-Karp, que usa as duas menores
+arestas do vértice 0, fica de 0\% a 2,0\% abaixo do ótimo; na raiz, a cota do B\&B usa a
+menor aresta duas vezes, porque as duas pontas do caminho coincidem em $v_0$. Com uma cota tão frouxa, a maioria dos nós tem $LB$ bem abaixo do ótimo, e
 nenhum limite superior os poda, nem o próprio ótimo. O caso extremo é a ulysses22, que
-tem a maior folga da \textit{mst} (33\%) e a menor da \textit{hk} (0,1\%). A
+tem uma das maiores folgas da \textit{mst} (33\%) e a menor da \textit{hk} (0,1\%). A
 \textit{hk} a resolve em 8\,ms; a \textit{mst} expande $8{,}4 \times 10^8$ nós em
 30\,min sem provar a otimalidade, embora já tivesse o ótimo (7\,529) como incumbente.
 Nas outras execuções interrompidas, o incumbente final varia: a eil51 termina a 1
@@ -535,8 +567,7 @@ variando uma \textit{feature} por vez.
 
 Com as penalidades de Held-Karp calculadas uma única vez na raiz, o B\&B resolveu as 15
 instâncias, até $N=70$, dentro do limite de 30\,min. Com a cota de MST pura, 5
-instâncias esgotaram o tempo, a primeira com $N=22$. Na raiz, a folga da \textit{hk}
-foi de 0,1\% a 4,9\%, e a da \textit{mst}, de 10\% a 33\%; essa diferença pesou mais
+instâncias esgotaram o tempo, a primeira com $N=22$. Na raiz, a folga da \textit{hk} (cota usada pelo B\&B) foi de 0,1\% a 4,9\%, e a da \textit{mst}, de 10\% a 33\%; essa diferença pesou mais
 na poda que qualquer \textit{warm-start}.
 
 Numa DFS que visita primeiro o vizinho mais próximo, iniciar com o tour do vizinho mais
